@@ -16,7 +16,7 @@ class PPM:
     ppm_data_folder: PPMDataFolderHandler
 
     def __init__(self) -> None:
-        self.table = pd.DataFrame()
+        self.table = pd.DataFrame(columns=[Field.IDU.value])
         self.ppm_data_folder = PPMDataFolderHandler()
 
     @property

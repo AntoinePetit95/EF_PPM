@@ -75,7 +75,7 @@ with tab_parcelle:
     columns_id_parcelle = st.columns(4)
     insee_input = columns_id_parcelle[0].text_input("Code Insee de la commune", "75107", max_chars=5)
     com_abs_input = columns_id_parcelle[1].text_input("Code commune absorbée", "000", max_chars=3)
-    section_input = columns_id_parcelle[2].text_input("Section", "CR",max_chars=2)
+    section_input = columns_id_parcelle[2].text_input("Section", "CR", max_chars=2)
     numero_input = columns_id_parcelle[3].text_input("Numéro cadastral", "1",max_chars=4)
 
     id_parcelle_est_correct = True
@@ -86,8 +86,13 @@ with tab_parcelle:
     numero = str(numero_input).zfill(4)
 
     if not all([c.isnumeric() for c in insee]):
-        st.warning('le code de commune absorbée doit être entièrement numérique')
-        id_parcelle_est_correct = False
+        if insee.startswith('2A') or insee.startswith('2B'):
+            if not all([c.isnumeric() for c in insee[2:]]):
+                st.warning("le code Insee doit être entièrement numérique après 2A ou 2B")
+                id_parcelle_est_correct = False
+        else:
+            st.warning("le code Insee doit être entièrement numérique (à l'exception des départements 2A et 2B)")
+            id_parcelle_est_correct = False
     if not all([c.isnumeric() for c in com_abs]):
         st.warning('le code de commune absorbée doit être entièrement numérique')
         id_parcelle_est_correct = False
@@ -146,7 +151,9 @@ with tab_fichier:
         if len(onglet_df.columns) > 1:
             col = st.selectbox("Quelle colonne contient les IDU ?", onglet_df.columns, help=help_idu)
 
-        liste_idu = onglet_df[col].to_list()
+        liste_idu = onglet_df[col].dropna().to_list()
+        liste_idu = [idu for idu in liste_idu if idu]  # remove None
+        liste_idu = [idu for idu in liste_idu if len(idu) == 14]
 
         with st.expander("aperçu des identifiants uniques parcelles"):
             st.write(pd.DataFrame(liste_idu))
@@ -162,6 +169,7 @@ with tab_fichier:
         )
 
         if bouton_ajouter_parcelle_depuis_fichier:
+
             st.session_state['parcelles'].extend(liste_idu)
             st.session_state['parcelles'] = list(set(st.session_state['parcelles']))
             st.session_state['parcelles'].sort()
