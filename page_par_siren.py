@@ -28,7 +28,7 @@ def interroge_base() -> None:
         return
     with st.status("Récupération des informations ...", expanded=True) as status:
         ppm = PPM()
-        ppm.get_from_owner(st.session_state['SIRENS'], limit_to_department=st.session_state['departements'])
+        ppm.fetch_sirens(st.session_state['SIRENS'], limit_to_department=st.session_state['departements'])
         st.session_state['ppm_parcelles'] = ppm
         status.update(
             label="Informations récupérées !", state="complete", expanded=True

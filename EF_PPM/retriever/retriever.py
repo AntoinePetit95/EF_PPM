@@ -41,7 +41,7 @@ class PPM:
         columns_to_aggregate = [f.value for f in right_fields()]
         for column_name in columns_to_aggregate:
             new_ppm.table[column_name] = [
-                ', '.join(list(set(original_df.loc[[i], column_name].tolist())))
+                ', '.join(list(set(original_df.loc[[i], column_name].fillna('').tolist())))
                 for i in new_ppm.table.index
             ]
 
@@ -118,7 +118,7 @@ class PPM:
 
         self.table.drop_duplicates(inplace=True, ignore_index=True)
 
-    def fetch(self, references: str | list[str], limit_to_department: list[str] | None = None) -> None:
+    def fetch_cad_refs(self, references: str | list[str], limit_to_department: list[str] | None = None) -> None:
         """
         Fetch all PM plots for this set of references and add it to parent.
         :param limit_to_department: départements to concentrate the search into
@@ -154,7 +154,7 @@ class PPM:
 
         self.table.drop_duplicates(inplace=True, ignore_index=True)
 
-    def get_from_owner(
+    def fetch_sirens(
             self,
             sirens: list[str] | None = None,
             limit_to_department: list[str] | None = None) -> None:
@@ -175,12 +175,12 @@ class PPM:
             name = 'parcelles_personnes_morales'
         assert os.path.isdir(folder_path)
         file_path = fr'{folder_path}{os.path.sep}{name}.xlsx'
-        self.table.to_excel(file_path, index=False)
+        self.table.fillna('').to_excel(file_path, index=False)
 
     @property
     def excel_file_bytes(self) -> io.BytesIO:
         excel_file_buffer = io.BytesIO()
-        self.table.to_excel(excel_file_buffer, index=False)
+        self.table.fillna('').to_excel(excel_file_buffer, index=False)
         excel_file_buffer.seek(0)
         return excel_file_buffer
 

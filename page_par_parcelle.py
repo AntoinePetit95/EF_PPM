@@ -30,7 +30,7 @@ def interroge_base() -> None:
         return
     with st.status("Récupération des informations ...", expanded=True) as status:
         ppm = PPM()
-        ppm.fetch(st.session_state['parcelles'])
+        ppm.fetch_cad_refs(st.session_state['parcelles'])
         st.session_state['ppm_parcelles'] = ppm
         status.update(
             label="Informations récupérées !", state="complete", expanded=True
