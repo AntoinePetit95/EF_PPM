@@ -2,8 +2,8 @@ import copy
 import io
 import os.path
 from enum import EnumType
+from typing import Literal
 import pandas as pd
-from pandas.core.indexes.api import union_indexes
 
 from EF_PPM.retriever.data_folder_handler import PPMDataFolderHandler
 from EF_PPM.retriever.data_file_handler import PPMDataFileHandler
@@ -20,36 +20,6 @@ class PPM:
         self.ppm_data_folder = PPMDataFolderHandler()
 
     @property
-    def merged_rights(self) -> 'PPM':
-        """
-        Concatenates rights along IDU and SUF (if exists)
-        :return: copy of the PPM object
-        """
-        new_ppm = copy.deepcopy(self)
-
-        # fields to use ase index temporarily : IDU + SUF (if available)
-        id_fields = [Field.IDU.value]
-        if Field.SUF.value in new_ppm.table.columns:
-            id_fields.append(Field.SUF.value)
-
-        # we want a table with a unique index. Start : create a new table with only the plot info
-        plot_columns = [f.value for f in plot_fields()]
-        new_ppm.table = new_ppm.table[plot_columns].drop_duplicates(ignore_index=True).set_index(id_fields)
-
-        # aggregate rights and right holders
-        original_df = self.table.set_index(id_fields)
-        columns_to_aggregate = [f.value for f in right_fields()]
-        for column_name in columns_to_aggregate:
-            new_ppm.table[column_name] = [
-                ', '.join(list(set(original_df.loc[[i], column_name].fillna('').tolist())))
-                for i in new_ppm.table.index
-            ]
-
-        # finally : drop index (keep IDU and SUF as column)
-        new_ppm.table = new_ppm.table.reset_index()
-        return new_ppm
-
-    @property
     def essential(self) -> 'PPM':
         """
         Only essentials values
@@ -57,11 +27,15 @@ class PPM:
         """
         new_ppm = copy.deepcopy(self)
 
+        if len(new_ppm.table) == 0:
+            return new_ppm
+
         fields_to_keep_and_order = [
             Field.IDU.value,
             Field.ADRESSE.value,
-            Field.CONTENANCE,
-            Field.LBL_DROIT.value,
+            Field.CONTENANCE.value,
+            Field.CODE_DROIT.value,
+            Field.FORME_JURIDIQUE_ABR.value,
             Field.DENOMINATION.value,
             Field.SIREN.value,
         ]
@@ -69,6 +43,39 @@ class PPM:
         fields_to_keep_and_order = [f for f in fields_to_keep_and_order if f in new_ppm.table.columns]
         new_ppm.table = new_ppm.table[fields_to_keep_and_order]
 
+        return new_ppm
+
+    @property
+    def merged_rights(self) -> 'PPM':
+        """
+        Concatenates rights along IDU and SUF (if exists)
+        :return: copy of the PPM object
+        """
+        new_ppm = copy.deepcopy(self)
+
+        if len(new_ppm.table) == 0:
+            return new_ppm
+
+        # fields to use as index temporarily : IDU + SUF (if available)
+        id_fields = [Field.IDU.value]
+        if Field.SUF.value in new_ppm.table.columns:
+            id_fields.append(Field.SUF.value)
+
+        # we want a table with a unique index. Start : create a new table with only the plot info
+        plot_columns = [f.value for f in plot_fields() if f.value in new_ppm.table]
+        new_ppm.table = new_ppm.table[plot_columns].drop_duplicates(ignore_index=True).set_index(id_fields)
+
+        # aggregate rights and right holders
+        original_df = self.table.set_index(id_fields)
+        columns_to_aggregate = [f.value for f in right_fields()]
+        for column_name in columns_to_aggregate:
+            new_ppm.table[column_name] = [
+                '|'.join(list(set(original_df.loc[[i], column_name].fillna('').tolist())))
+                for i in new_ppm.table.index
+            ]
+
+        # finally : drop index (keep IDU and SUF as column)
+        new_ppm.table = new_ppm.table.reset_index()
         return new_ppm
 
     @property
@@ -80,6 +87,9 @@ class PPM:
         """
         # create a new PPM object
         new_ppm = copy.deepcopy(self)
+
+        if len(new_ppm.table) == 0:
+            return new_ppm
 
         # drop duplicates. Duplicates are same plot id, same person, and same right.
         fields_defining_duplicates = [Field.IDU.value, Field.CODE_DROIT.value, Field.MAJIC.value]
@@ -93,11 +103,15 @@ class PPM:
         suf_dependent_info = [Field.SUF.value, Field.CONTENANCE_SUF.value, Field.NAT_CAD.value]
         for column in suf_dependent_info:
             new_ppm.table[column] = [
-                ', '.join([
+                '|'.join([
                     str(v) or '' for v in set(original_df.loc[[i], column])
                 ])
                 for i in new_ppm.table.index
             ]
+
+        #drop CONTENANCE SUF
+        new_ppm.table = new_ppm.table.drop(columns=[Field.CONTENANCE_SUF.value])
+
         # finally : drop index (keep IDU)
         new_ppm.table = new_ppm.table.reset_index()
 
@@ -170,17 +184,44 @@ class PPM:
                 df = ppm_file.filter_by_siren(sirens)
                 self.table = pd.concat([self.table, df], ignore_index=True)
 
+        # finalement, on relance la recherche par parcelles, pour avoir les autres ayants droits
+        idus = self.table[Field.IDU.value].tolist()
+        self.fetch_cad_refs(references=idus, limit_to_department=limit_to_department)
+
+
+    def fetch_name(
+            self,
+            name: str,
+            limit_to_department: list[str] | None = None,
+            mode: Literal['exact', 'contains'] = 'exact',
+    ) -> None:
+        if limit_to_department:
+            department_to_search = limit_to_department
+        else:
+            department_to_search = DEPARTEMENTS_CODES
+
+        for dept in department_to_search:
+            files = self.ppm_data_folder.departmental_files(dept)
+            for f in files:
+                ppm_file = PPMDataFileHandler(f)
+                df = ppm_file.filter_by_name(name=name, mode=mode)
+                self.table = pd.concat([self.table, df], ignore_index=True)
+
+        # finalement, on relance la recherche par parcelles, pour avoir les autres ayants droits
+        idus = self.table[Field.IDU.value].tolist()
+        self.fetch_cad_refs(references=idus, limit_to_department=limit_to_department)
+
     def save_to_excel(self, folder_path: str, name: str | None = None) -> None:
         if not name:
             name = 'parcelles_personnes_morales'
         assert os.path.isdir(folder_path)
         file_path = fr'{folder_path}{os.path.sep}{name}.xlsx'
-        self.table.fillna('').to_excel(file_path, index=False)
+        self.table.fillna('').to_excel(file_path, index=False, sheet_name='parcelles')
 
     @property
     def excel_file_bytes(self) -> io.BytesIO:
         excel_file_buffer = io.BytesIO()
-        self.table.fillna('').to_excel(excel_file_buffer, index=False)
+        self.table.fillna('').to_excel(excel_file_buffer, index=False, sheet_name='parcelles')
         excel_file_buffer.seek(0)
         return excel_file_buffer
 
@@ -191,3 +232,7 @@ class PPM:
     @staticmethod
     def field_enum() -> EnumType:
         return Field
+
+    def sort_by_idu(self) -> None:
+        self.table.sort_values(by=[Field.IDU.value], inplace=True, ignore_index=True)
+

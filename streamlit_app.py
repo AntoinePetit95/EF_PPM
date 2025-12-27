@@ -20,6 +20,7 @@ pages = {
     "Demande": [
         st.Page("page_par_parcelle.py", title="Par parcelle"),
         st.Page("page_par_siren.py", title="Par SIREN"),
+        st.Page("page_par_nom.py", title="Par nom")
     ],
     "Ressources": [
         st.Page("page_readme.py", title="Lisez-moi"),

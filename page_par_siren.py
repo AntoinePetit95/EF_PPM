@@ -5,11 +5,44 @@ from EF_PPM.retriever.retriever import PPM
 from EF_PPM.utils.dept_code import DEPARTEMENTS_CODES, DEPARTEMENTS
 
 
+@st.fragment
+def affiche_tableau(ppm:PPM) -> None:
+
+    ppm_to_show = ppm
+
+    help_suf = ("La **subdivision fiscale (suf)** est une partie de parcelle ayant la même nature de culture "
+                "(c’est-à-dire la même affectation fiscale). Il est très rare que les SUF d'une même parcelle "
+                "aient des propriétaires différents, il est conseillé de les regrouper pour une lecture plus simple.")
+    group_by_suf = st.toggle("Grouper les SUF", help=help_suf, value=True)
+    if group_by_suf:
+        ppm_to_show = ppm_to_show.merged_suf
+
+    help_rights = "Grouper les informations des ayants-droits pour avoir une seule ligne par parcelle."
+    group_by_rights = st.toggle("Grouper les droits", help=help_rights, value=False)
+    if group_by_rights:
+        ppm_to_show = ppm_to_show.merged_rights
+
+    help_essential = "Ne conserver que les informations essentielles."
+    show_only_essential = st.toggle("Fichier simplifié", help=help_essential, value=True)
+    if show_only_essential:
+        ppm_to_show = ppm_to_show.essential
+
+    ppm_to_show.sort_by_idu()
+    st.write(ppm_to_show.table)
+
+    st.download_button(
+        "Télécharger la table",
+        data=ppm_to_show.excel_file_bytes,
+        mime="application/octet-stream",
+        file_name="Énergie_Foncière_parcellaire_PM.xlsx"
+    )
+
+
 def initialize_values() -> None:
     values = {
         'SIRENS': [],
         'departements': [],
-        'ppm_proprietaires': PPM(),
+        'ppm_siren': PPM(),
     }
     for k, v in values.items():
         if k not in st.session_state.keys():
@@ -21,32 +54,19 @@ info_recherche_pm = ("La recherche par numéro SIREN peut être incomplète, "
                      "certains numéros SIREN de la base correspondent à une numérotation interne des impôts")
 st.title("Recherche par numéro SIREN", help=info_recherche_pm)
 
+
 def interroge_base() -> None:
     if not st.session_state['SIRENS']:
         return
     if not st.session_state['departements']:
         return
-    with st.status("Récupération des informations ...", expanded=True) as status:
+    with st.spinner("Récupération des informations ...", show_time=True):
         ppm = PPM()
         ppm.fetch_sirens(st.session_state['SIRENS'], limit_to_department=st.session_state['departements'])
-        st.session_state['ppm_parcelles'] = ppm
-        status.update(
-            label="Informations récupérées !", state="complete", expanded=True
-        )
-        st.write(st.session_state['ppm_parcelles'].merged_suf.essential.table)
-        c1, c2 = st.columns(2)
-        c1.download_button(
-            "télécharger (données simplifiée)",
-            data=st.session_state['ppm_parcelles'].merged_suf.essential.excel_file_bytes,
-            mime="application/octet-stream",
-            file_name="Énergie_Foncière_parcellaire_PM.xlsx"
-        )
-        c2.download_button(
-            "télécharger (données complètes)",
-            data=st.session_state['ppm_parcelles'].merged_suf.excel_file_bytes,
-            mime="application/octet-stream",
-            file_name="Énergie_Foncière_parcellaire_PM.xlsx"
-        )
+        st.session_state['ppm_siren'] = ppm
+    st.success("Informations récupérées !")
+
+    affiche_tableau(st.session_state['ppm_siren'])
 
 def supprimer_siren(_siren: str) -> None:
     if _siren in st.session_state['SIRENS']:

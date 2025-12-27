@@ -1,4 +1,6 @@
 import os
+from typing import Literal
+
 import pandas as pd
 
 from EF_PPM.utils.group_code import group_code
@@ -123,6 +125,20 @@ class PPMDataFileHandler:
 
         if len(sirens) != 0:
             df_search = self.clean_table[self.df[Field.SIREN.value].isin(sirens)]
+            return_df = pd.concat([return_df, df_search])
+
+        return return_df
+
+    def filter_by_name(self, name: str, mode: Literal['exact', 'contains']) -> pd.DataFrame:
+        return_df = pd.DataFrame(columns=[f.value for f in Field])
+
+        if len(name) != 0:
+            if mode == 'exact':
+                df_search = self.clean_table[self.df[Field.DENOMINATION.value]==name]
+            elif mode == 'contains':
+                df_search = self.clean_table[self.df[Field.DENOMINATION.value].str.contains(name)]
+            else:
+                raise ValueError(mode)
             return_df = pd.concat([return_df, df_search])
 
         return return_df
