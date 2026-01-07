@@ -195,7 +195,8 @@ with tab_fichier:
         excel_file = pd.ExcelFile(fichier)
         if len(excel_file.sheet_names) > 1:
             onglet = st.selectbox("plusieurs onglets existent. Lequel choisir ?", excel_file.sheet_names)
-
+        else:
+            onglet=0
         onglet_df = pd.read_excel(fichier, sheet_name=onglet, dtype='str')
 
         with st.expander("aperçu de l'onglet"):
